@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from numpy.random import RandomState
 from numpy.testing import assert_almost_equal
+from scipy.special import gamma
 
 import arch.univariate.recursions_python as recpy
 
@@ -397,6 +398,23 @@ var_bounds = np.ones((T, 2)) * var_bounds
         assert np.all(sigma2 >= self.var_bounds[:, 0])
         assert np.all(sigma2 <= 2 * self.var_bounds[:, 1])
 
+    def test_midas_hyperbolic(self):
+        T, resids, = self.T, self.resids
+        sigma2, backcast = self.sigma2, self.backcast
+
+        parameters = np.array([.1, 0.8, 0])
+        j = np.arange(1,22+1)
+        weights = gamma(j+0.6) / (gamma(j+1) * gamma(0.6))
+        weights = weights / weights.sum()
+        recpy.midas_recursion(parameters, weights, resids, sigma2, T, backcast, self.var_bounds)
+        sigma2_numba = sigma2.copy()
+        recpy.midas_recursion_python(parameters, weights, resids, sigma2, T,
+                                     backcast, self.var_bounds)
+        sigma2_python = sigma2.copy()
+        rec.midas_recursion(parameters, weights, resids, sigma2, T, backcast, self.var_bounds)
+        assert_almost_equal(sigma2_numba, sigma2)
+        assert_almost_equal(sigma2_python, sigma2)
+
     @pytest.mark.skipif(missing_numba or missing_extension, reason='numba not installed')
     def test_garch_performance(self):
         garch_setup = """
@@ -463,3 +481,24 @@ var_bounds, lnsigma2, std_resids, abs_std_resids)
         timer = Timer(egarch_first, 'Numba', egarch_second, 'Cython', 'EGARCH',
                       self.timer_setup + egarch_setup)
         timer.display()
+
+    @pytest.mark.skipif(missing_numba or missing_extension, reason='numba not installed')
+    def test_midas_performance(self):
+        midas_setup = """
+from scipy.special import gamma
+parameters = np.array([.1, 0.8, 0])
+j = np.arange(1,22+1)
+weights = gamma(j+0.6) / (gamma(j+1) * gamma(0.6))
+weights = weights / weights.sum()
+"""
+
+        midas_first = """
+recpy.midas_recursion(parameters, weights, resids, sigma2, T, backcast, var_bounds)
+                """
+        midas_second = """
+rec.midas_recursion(parameters, weights, resids, sigma2, T, backcast, var_bounds)
+"""
+        timer = Timer(midas_first, 'Numba', midas_second, 'Cython', 'GARCH',
+                      self.timer_setup + midas_setup)
+        timer.display()
+        assert timer.ratio < 10.0

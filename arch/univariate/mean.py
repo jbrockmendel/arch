@@ -765,7 +765,7 @@ class ConstantMean(HARX):
 
         Parameters
         ----------
-        params : array
+        params : ndarray
             Parameters to use when simulating the model.  Parameter order is
             [mean volatility distribution]. There is one parameter in the mean
             model, mu.
